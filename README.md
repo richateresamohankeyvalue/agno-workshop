@@ -40,6 +40,16 @@ must be running separately (`docker compose up --build` in that repo) and reacha
 uv run python main.py
 ```
 
+### Docker
+
+```bash
+docker compose run --rm app
+```
+
+`MCP_SERVER_URL` defaults to `http://host.docker.internal:8081/sse` inside the container (mapped
+via `extra_hosts` so this also works on Linux, not just Docker Desktop) — override it in `.env` if
+the mock server instead lives on a shared Docker network.
+
 Try:
 ```
 > What's on my calendar today?

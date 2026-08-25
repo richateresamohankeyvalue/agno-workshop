@@ -1,0 +1,11 @@
+services:
+  app:
+    build: .
+    env_file: .env
+    environment:
+      MCP_SERVER_URL: http://host.docker.internal:8081/sse
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    stdin_open: true
+    tty: true
+    command: python main.py
