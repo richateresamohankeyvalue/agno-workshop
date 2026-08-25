@@ -1,6 +1,6 @@
 [project]
 name = "daily-dev-assistant"
-version = "0.1.0"
+version = "0.2.0"
 description = "Developer daily assistant agent, built on Agno — Agent SDK Bake-off workshop"
 readme = "README.md"
 requires-python = ">=3.12"
@@ -8,6 +8,8 @@ dependencies = [
     "agno[mcp]>=3.0.0",
     "litellm>=1.92.0",
     "python-dotenv>=1.2.2",
+    "sqlalchemy>=2.0.0",
+    "psycopg[binary]>=3.2.0",
 ]
 
 [build-system]

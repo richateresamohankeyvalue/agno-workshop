@@ -1,4 +1,4 @@
-"""Environment-driven settings: where the MCP server lives, and which model to use."""
+"""Environment-driven settings: where the MCP server lives, which model to use, and where to store memory."""
 
 from __future__ import annotations
 
@@ -8,6 +8,7 @@ from dataclasses import dataclass
 from dotenv import load_dotenv
 
 DEFAULT_MODEL_ID = "claude-sonnet-5"
+DEFAULT_DB_URL = "postgresql+psycopg://ai:ai@localhost:5532/ai"
 
 
 @dataclass(frozen=True)
@@ -17,6 +18,7 @@ class Settings:
     model_id: str
     litellm_api_key: str | None
     litellm_base_url: str | None
+    db_url: str
 
 
 def load_settings() -> Settings:
@@ -27,4 +29,5 @@ def load_settings() -> Settings:
         model_id=os.getenv("AGENT_MODEL_ID", DEFAULT_MODEL_ID),
         litellm_api_key=os.getenv("LITELLM_API_KEY"),
         litellm_base_url=os.getenv("LITELLM_BASE_URL"),
+        db_url=os.getenv("AGENT_DB_URL", DEFAULT_DB_URL),
     )

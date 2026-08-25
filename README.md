@@ -1,55 +1,67 @@
 # agno-workshop
 
 A developer daily-assistant agent built on [Agno](https://github.com/agno-agi/agno), for the
-Agent SDK Bake-off workshop. Each checkpoint in the workshop's arc (tool use → memory →
-deterministic pipeline → human approval → mandatory review → evaluation/cost → model
-portability) lives on its own `checkpoint-N` branch, building additively on the last.
+Agent SDK Bake-off workshop.
 
-This branch: **`checkpoint-1` — the agent primitive.** An LLM loop with tools, nothing else —
-no memory, no pipeline, no review step. Just the smallest thing that proves a model can reach
-real data over MCP and decide for itself when to use it.
+This branch: **`checkpoint-2` — Memory.** The same agent from checkpoint-1, now with two kinds
+of memory backed by PostgreSQL:
+
+| | Short-term (session history) | Long-term (user memories) |
+|---|---|---|
+| **Stores** | The messages in this conversation | Facts the agent learns about the user |
+| **Scope** | One `session_id` | One `user_id`, across all sessions |
+| **Answers** | "What did we just discuss?" | "What do I know about this person?" |
 
 ## Architecture
 
-- `src/daily_dev_assistant/config.py` — env-driven settings (MCP server location, model id).
-- `src/daily_dev_assistant/agent.py` — builds the MCP tool connection and the agent. `TOOL_NAMES`
-  is the (deliberately small) slice of the MCP server's full catalog this checkpoint's agent
-  gets; `INSTRUCTIONS` only sets scope, not tool-specific guidance.
-- `main.py` — the runnable entrypoint: connects, prints the tools available to the agent, then
-  loops on stdin, printing each reply and the tool call(s) that produced it.
-
-The agent has no fixed identity for "the user" yet, and no tool to look one up — a question
-like "PRs waiting for my review?" will make the model guess. That's expected here; it's fixed
-in a later checkpoint, not this one.
+- `docker-compose.yml` — PostgreSQL (port 5532), the only infra checkpoint-2 adds.
+- `src/daily_dev_assistant/config.py` — env-driven settings, now including `db_url`.
+- `src/daily_dev_assistant/agent.py` — wires `PostgresDb` to the agent with
+  `add_history_to_context=True` (short-term) and `enable_user_memories=True` (long-term).
+- `main.py` — the runnable entrypoint, now accepting `--user` and `--session` flags.
 
 ## Setup
 
 ```bash
+# 1. Start PostgreSQL
+docker compose up -d
+
+# 2. Install deps
 uv venv .venv
 uv pip install -e .
-cp .env.example .env   # fill in LITELLM_API_KEY (and LITELLM_BASE_URL if you're on a proxy)
+
+# 3. Configure
+cp .env.example .env   # fill in LITELLM_API_KEY
 ```
 
-The MCP mock server ([agent-sdk-bakeoff-mcp-server](https://github.com/richateresamohankeyvalue/agent-sdk-bakeoff-mcp-server))
-must be running separately (`docker compose up --build` in that repo) and reachable at
-`MCP_SERVER_URL` (default `http://localhost:8081/sse`).
+The MCP mock server must be running separately (see checkpoint-1 README).
 
 ## Running
 
 ```bash
-uv run python main.py
+uv run python main.py --user alice
 ```
 
-Try:
-```
-> What's on my calendar today?
-> Any PRs waiting for my review?
+## Demo script (the three-step proof)
+
+```bash
+# Step 1: tell it something, in a new session
+uv run python main.py --user alice
+> Hi, remember that my GitHub username is alice-dev
+> What's my GitHub username?
+> exit
+
+# Step 2: brand new session, SAME user — it still knows (long-term memory)
+uv run python main.py --user alice
+> What's my GitHub username?
+> exit
 ```
 
-The first should work cleanly. The second will likely misfire or guess at who "my" refers to —
-point that out, don't fix it here.
+Step 2 works because `enable_user_memories=True` extracts facts scoped to the *user*, not the
+session. A new session starts with no history, but the agent recalls user-level facts from the
+database.
 
 ## Hands-on
 
-Add a third tool of your choice to `TOOL_NAMES` in `src/daily_dev_assistant/agent.py` (see the
-MCP server's README for the full tool catalog), then ask a question only that tool can answer.
+Run the three-step demo under your own identity. Before running step 2, predict: will it
+remember? Why?
