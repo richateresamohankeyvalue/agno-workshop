@@ -26,7 +26,7 @@ from agno.models.litellm import LiteLLM
 from agno.tools.mcp import MCPTools
 
 from daily_dev_assistant.config import Settings
-from daily_dev_assistant.pipeline import build_standup_pipeline_with_approval
+from daily_dev_assistant.pipeline import build_sprint_planning_pipeline, build_standup_pipeline_with_approval
 
 # --- The pipeline, wrapped as two tools ---
 
@@ -82,6 +82,23 @@ def build_standup_tools(settings: Settings, pipeline_mcp_tools: MCPTools, db: Ba
         return {"status": "denied", "content": result.content}
 
     return start_standup_pipeline, resume_standup_pipeline
+
+
+# --- Sprint planning, wrapped as a single tool ---
+
+
+def build_sprint_planning_tool(settings: Settings, sprint_mcp_tools: MCPTools):
+    """Returns a single tool function the agent can call to prep for sprint planning."""
+
+    async def prep_sprint_planning() -> Dict[str, Any]:
+        """Gather everything needed to prep for sprint planning: open tickets,
+        calendar, PRs, and produce a structured brief with carry-overs,
+        items in review, upcoming meetings, and suggested priorities."""
+        pipeline = build_sprint_planning_pipeline(settings, sprint_mcp_tools)
+        result = await pipeline.arun(input="Prep sprint planning brief.")
+        return {"status": "completed", "content": result.content}
+
+    return prep_sprint_planning
 
 
 # --- The mandatory review step ---

@@ -133,6 +133,86 @@ def build_standup_pipeline(settings: Settings, mcp_tools: MCPTools) -> Workflow:
         ],
     )
 
+# --- Sprint planning pipeline (checkpoint-7) ---
+
+SPRINT_MCP_TOOL_NAMES = ["get_user_profile", "get_jira_tickets", "get_calendar_events", "get_github_prs"]
+
+
+def build_sprint_mcp_tools(settings: Settings) -> MCPTools:
+    return MCPTools(
+        url=settings.mcp_server_url,
+        transport=settings.mcp_transport,
+        include_tools=SPRINT_MCP_TOOL_NAMES,
+    )
+
+
+def make_fetch_prs_step(mcp_tools: MCPTools) -> Step:
+    async def fetch_prs(step_input: StepInput) -> StepOutput:
+        prs = await _call_tool(mcp_tools, "get_github_prs")
+        return StepOutput(content=prs)
+
+    return Step(name="fetch_prs", executor=fetch_prs)
+
+
+SPRINT_SYNTHESIS_INSTRUCTIONS = """You prepare a sprint planning brief from data that has
+already been gathered for you — a developer profile, their open tickets, this week's
+calendar, and open pull requests. Never invent a fact that isn't in that data.
+
+Structure the brief under these headings:
+  - Carry-over: tickets still open from the current sprint
+  - In review: PRs waiting for review or merge
+  - Upcoming meetings: anything that eats focus time this week
+  - Suggested priorities: rank the open work by what should ship first
+
+If a section has nothing, say so plainly."""
+
+
+def make_sprint_synthesize_step(settings: Settings) -> Step:
+    synthesis_agent = Agent(
+        model=LiteLLM(
+            id=settings.model_id,
+            api_key=settings.litellm_api_key,
+            api_base=settings.litellm_base_url,
+            temperature=None,
+            top_p=None,
+        ),
+        instructions=SPRINT_SYNTHESIS_INSTRUCTIONS,
+    )
+
+    async def synthesize(step_input: StepInput) -> StepOutput:
+        profile = step_input.get_step_output("fetch_profile").content
+        tickets = step_input.get_step_output("fetch_tickets").content
+        calendar = step_input.get_step_output("fetch_calendar").content
+        prs = step_input.get_step_output("fetch_prs").content
+
+        prompt = (
+            f"Profile:\n{profile}\n\n"
+            f"Open tickets:\n{tickets}\n\n"
+            f"Calendar:\n{calendar}\n\n"
+            f"Open PRs:\n{prs}\n\n"
+            "Write the sprint planning brief."
+        )
+        response = await synthesis_agent.arun(prompt)
+        return StepOutput(content=response.content)
+
+    return Step(name="sprint_synthesize", executor=synthesize)
+
+
+def build_sprint_planning_pipeline(settings: Settings, mcp_tools: MCPTools) -> Workflow:
+    return Workflow(
+        name="sprint_planning_pipeline",
+        steps=[
+            make_fetch_profile_step(mcp_tools),
+            make_fetch_tickets_step(mcp_tools),
+            make_fetch_calendar_step(mcp_tools),
+            make_fetch_prs_step(mcp_tools),
+            make_sprint_synthesize_step(settings),
+        ],
+    )
+
+
+# --- Standup pipeline with approval (checkpoint-4) ---
+
 APPROVAL_MCP_TOOL_NAMES = MCP_TOOL_NAMES + ["post_slack_message", "confirm_action"]
 
 STANDUP_CHANNEL = "standup-updates"

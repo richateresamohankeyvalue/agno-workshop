@@ -3,28 +3,47 @@
 A developer daily-assistant agent built on [Agno](https://github.com/agno-agi/agno), for the
 Agent SDK Bake-off workshop.
 
-This branch: **`checkpoint-6` — Evaluation, cost, and swapping models.** Three things that
-matter most in a real adoption decision, added to the checkpoint-5 assistant:
+This branch: **`checkpoint-7` — The full assistant.** Every earlier checkpoint is a
+load-bearing piece of this one system: tool use, memory, a fixed pipeline, human approval,
+a mandatory review, evaluation, cost accounting, model portability — all composed into a
+single agent that handles three request shapes from one instructions block, deciding for
+itself which kind of request it's looking at.
 
-| Feature | What it shows |
-|---|---|
-| **Token usage** | `input / output / total` printed after every turn — zero extra setup, straight off the response |
-| **Automated grader** | A second, different model scores each reply on grounding, completeness, conciseness |
-| **Model portability** | Change `AGENT_MODEL_ID` in `.env`, re-run the same script — zero code changes |
+## The three request shapes
 
-## Architecture (what's new)
+| Request | What happens | Example |
+|---|---|---|
+| Quick lookup | 1–2 tool calls, direct answer | "Any PRs waiting for my review?" |
+| Standup prep | Fixed pipeline → pauses for approval | "Can you prep my standup?" |
+| Sprint planning | Fixed pipeline → ranked brief | "Prep me for sprint planning" |
 
-- `src/daily_dev_assistant/grader.py` — `build_grader` + `grade_reply`: a small model that
-  scores each response against a three-criterion rubric. Deliberately a different model family
-  from the agent's own.
-- `src/daily_dev_assistant/agent_pipeline.py` — `TurnMetrics` added to `TurnResult`, extracted
-  from the Agno response's built-in `metrics` field.
-- `assistant.py` — prints token counts, review verdict (checkpoint-5), and grading result after
-  every turn. Prints the model id at startup so model-swap is visible.
-- `src/daily_dev_assistant/config.py` — adds `GRADER_MODEL_ID`.
+No external "mode" flag — the agent infers scope from the message alone.
 
-Everything from checkpoints 1–5 is unchanged: `main.py`, `standup.py`, `standup_with_approval.py`,
-`resume_standup.py`.
+## Architecture
+
+```
+assistant.py
+    │
+    ├── agent (checkpoint-1/2: tools + memory)
+    │     ├── MCP tools: calendar, PRs, tickets
+    │     ├── start/resume_standup_pipeline (checkpoint-3/4/5)
+    │     └── prep_sprint_planning (checkpoint-7: new)
+    │
+    ├── reviewer (checkpoint-5: grounding check, unconditional)
+    ├── grader (checkpoint-6: quality rubric)
+    └── token metrics (checkpoint-6: usage accounting)
+```
+
+**What's new in checkpoint-7:**
+- `src/daily_dev_assistant/pipeline.py` — `build_sprint_planning_pipeline`: fetches profile,
+  tickets, calendar, PRs, then synthesizes into a structured sprint brief.
+- `src/daily_dev_assistant/agent_pipeline.py` — `build_sprint_planning_tool`: wraps the pipeline
+  as a single tool the agent can call.
+- `assistant.py` — one instructions block covering all three shapes. The agent decides which
+  pipeline (or direct tool call) to use based on the message.
+
+Everything from checkpoints 1–6 is still here, unchanged: `main.py`, `standup.py`,
+`standup_with_approval.py`, `resume_standup.py`.
 
 ## Setup
 
@@ -44,14 +63,12 @@ uv run python assistant.py --user alice
 ## Demo script
 
 ```
-1. run "hi"
-   — point at the token line: input / output / total
-
-2. Change AGENT_MODEL_ID in .env to a different provider, re-run —
-   same script, different model, zero other changes
+1. "Any PRs waiting for my review?"     — quick lookup, 1-2 tool calls
+2. "Can you prep my standup?"           — fixed procedure, pauses for approval
+3. "Prep me for sprint planning"        — open-ended, ranked options back
 ```
 
 ## Hands-on
 
-Write one grading check in `grader.py` for a failure mode you care about (tone, verbosity, a
-compliance rule) and run it against a real transcript.
+Ask the agent something ambiguous — "help me get ready for tomorrow" — and see which shape it
+picks. Was it right? Could the instructions be improved?
