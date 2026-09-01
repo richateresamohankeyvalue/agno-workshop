@@ -36,14 +36,20 @@ async def main() -> None:
     session_id = args.session or str(uuid.uuid4())
 
     mcp_tools = build_mcp_tools(settings)
-    await mcp_tools.connect()
-    if not mcp_tools.functions:
-        raise SystemExit(f"Could not reach MCP server at {settings.mcp_server_url} — is it running?")
+    try:
+        await mcp_tools.connect()
+    except Exception:
+        pass
+
+    if mcp_tools.functions:
+        print(f"Connected. Tools: {sorted(mcp_tools.functions)}")
+    else:
+        print(f"WARNING: MCP server at {settings.mcp_server_url} not reachable — running without tools.")
+        mcp_tools = None
+
+    print(f"User: {user_id} | Session: {session_id}\n")
 
     try:
-        print(f"Connected. Tools: {sorted(mcp_tools.functions)}")
-        print(f"User: {user_id} | Session: {session_id}\n")
-
         agent = build_agent(settings, mcp_tools, user_id=user_id, session_id=session_id)
 
         print('Type a message, or "exit" to quit.\n')
@@ -59,7 +65,8 @@ async def main() -> None:
                 print(f"  [tool call] {tool.tool_name}({tool.tool_args})")
             print()
     finally:
-        await mcp_tools.close()
+        if mcp_tools:
+            await mcp_tools.close()
 
 
 if __name__ == "__main__":

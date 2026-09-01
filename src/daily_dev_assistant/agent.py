@@ -16,10 +16,13 @@ Both are backed by PostgreSQL via Agno's built-in `PostgresDb`.
 
 from __future__ import annotations
 
+import litellm
 from agno.agent import Agent
 from agno.db.postgres import PostgresDb
 from agno.models.litellm import LiteLLM
 from agno.tools.mcp import MCPTools
+
+litellm.drop_params = True
 
 from daily_dev_assistant.config import Settings
 
@@ -44,7 +47,7 @@ def build_mcp_tools(settings: Settings) -> MCPTools:
 
 def build_agent(
     settings: Settings,
-    mcp_tools: MCPTools,
+    mcp_tools: MCPTools | None,
     *,
     user_id: str,
     session_id: str,
@@ -54,14 +57,14 @@ def build_agent(
     return Agent(
         model=LiteLLM(id=settings.model_id, api_key=settings.litellm_api_key, api_base=settings.litellm_base_url),
         instructions=INSTRUCTIONS,
-        tools=[mcp_tools],
+        tools=[mcp_tools] if mcp_tools else [],
         # --- Storage (session persistence) ---
         db=db,
         # --- Short-term: include recent turns in context ---
         add_history_to_context=True,
         num_history_runs=5,
         # --- Long-term: extract and recall user-scoped facts ---
-        enable_user_memories=True,
+        update_memory_on_run=True,
         # --- Identity ---
         user_id=user_id,
         session_id=session_id,
