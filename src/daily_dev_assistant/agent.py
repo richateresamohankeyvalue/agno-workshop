@@ -9,19 +9,24 @@ Two kinds of memory, two different scopes:
   Long-term (user memories)
     → Facts the agent decides are worth retaining about a person.
     → Scoped to a user_id — survives across sessions.
-    → Enabled by `enable_user_memories=True`.
+    → Enabled by `update_memory_on_run=True` + `add_memories_to_context=True`.
 
 Both are backed by PostgreSQL via Agno's built-in `PostgresDb`.
 """
 
 from __future__ import annotations
 
+import litellm
 from agno.agent import Agent
 from agno.db.postgres import PostgresDb
 from agno.models.litellm import LiteLLM
 from agno.tools.mcp import MCPTools
 
 from daily_dev_assistant.config import Settings
+
+# The shared workshop LiteLLM proxy rejects sampling params (temperature,
+# top_p, ...) that Anthropic models route through it don't support.
+litellm.drop_params = True
 
 TOOL_NAMES = ["get_calendar_events", "get_github_prs"]
 
@@ -52,7 +57,15 @@ def build_agent(
     db = PostgresDb(db_url=settings.db_url)
 
     return Agent(
-        model=LiteLLM(id=settings.model_id, api_key=settings.litellm_api_key, api_base=settings.litellm_base_url),
+        model=LiteLLM(
+            id=settings.model_id,
+            api_key=settings.litellm_api_key,
+            api_base=settings.litellm_base_url,
+            # Anthropic rejects temperature+top_p sent together; agno always
+            # sends both with non-None defaults, so drop both explicitly.
+            temperature=None,
+            top_p=None,
+        ),
         instructions=INSTRUCTIONS,
         tools=[mcp_tools],
         # --- Storage (session persistence) ---
@@ -61,7 +74,9 @@ def build_agent(
         add_history_to_context=True,
         num_history_runs=5,
         # --- Long-term: extract and recall user-scoped facts ---
-        enable_user_memories=True,
+        # (`enable_user_memories` was renamed in the installed agno>=3.0.0)
+        update_memory_on_run=True,
+        add_memories_to_context=True,
         # --- Identity ---
         user_id=user_id,
         session_id=session_id,
