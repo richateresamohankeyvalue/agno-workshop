@@ -18,9 +18,10 @@ import json
 
 import litellm
 from agno.agent import Agent
+from agno.db.base import BaseDb
 from agno.models.litellm import LiteLLM
 from agno.tools.mcp import MCPTools
-from agno.workflow import Step, StepInput, StepOutput, Workflow
+from agno.workflow import HumanReview, OnReject, Step, StepInput, StepOutput, Workflow
 
 from daily_dev_assistant.config import Settings
 
@@ -121,5 +122,67 @@ def build_standup_pipeline(settings: Settings, mcp_tools: MCPTools) -> Workflow:
             make_fetch_tickets_step(mcp_tools),
             make_fetch_calendar_step(mcp_tools),
             make_synthesize_step(settings),
+        ],
+    )
+
+APPROVAL_MCP_TOOL_NAMES = MCP_TOOL_NAMES + ["post_slack_message", "confirm_action"]
+
+STANDUP_CHANNEL = "standup-updates"
+
+
+def build_mcp_tools_with_approval(settings: Settings) -> MCPTools:
+    return MCPTools(
+        url=settings.mcp_server_url,
+        transport=settings.mcp_transport,
+        include_tools=APPROVAL_MCP_TOOL_NAMES,
+    )
+
+
+def make_draft_post_step(mcp_tools: MCPTools) -> Step:
+    """Drafts the Slack post. No side effect yet — drafting never posts."""
+
+    async def draft_post(step_input: StepInput) -> StepOutput:
+        standup_text = step_input.get_step_output("synthesize").content
+        draft = await _call_tool(mcp_tools, "post_slack_message", channel=STANDUP_CHANNEL, message=standup_text)
+        return StepOutput(content=draft)
+
+    return Step(name="draft_standup_post", executor=draft_post)
+
+
+def make_publish_post_step(mcp_tools: MCPTools) -> Step:
+    """The pause. `requires_confirmation` stops the workflow *before* this
+    step's body runs, and persists that paused state to the workflow's db —
+    a separate process can load the run by id and resume it later. Only a
+    resume with an approved decision reaches `confirm_action`, the one call
+    in this whole pipeline that actually posts anything. A denial (or a run
+    nobody ever resumes) leaves the draft sitting there, unconfirmed."""
+
+    async def publish_post(step_input: StepInput) -> StepOutput:
+        draft = step_input.get_step_output("draft_standup_post").content
+        result = await _call_tool(mcp_tools, "confirm_action", pending_action_id=draft["pending_action_id"])
+        return StepOutput(content=result)
+
+    return Step(
+        name="publish_standup_post",
+        executor=publish_post,
+        human_review=HumanReview(
+            requires_confirmation=True,
+            confirmation_message=f"Approve posting today's standup to #{STANDUP_CHANNEL}?",
+            on_reject=OnReject.skip,
+        ),
+    )
+
+
+def build_standup_pipeline_with_approval(settings: Settings, mcp_tools: MCPTools, db: BaseDb) -> Workflow:
+    return Workflow(
+        name="standup_pipeline_with_approval",
+        db=db,
+        steps=[
+            make_fetch_profile_step(mcp_tools),
+            make_fetch_tickets_step(mcp_tools),
+            make_fetch_calendar_step(mcp_tools),
+            make_synthesize_step(settings),
+            make_draft_post_step(mcp_tools),
+            make_publish_post_step(mcp_tools),
         ],
     )

@@ -3,39 +3,51 @@
 A developer daily-assistant agent built on [Agno](https://github.com/agno-agi/agno), for the
 Agent SDK Bake-off workshop.
 
-This branch: **`checkpoint-3` — A deterministic pipeline.** A fixed, multi-step standup
-procedure that runs the same way every time — because a `Workflow`'s step list decides what
-runs next, not a model. No agent is involved yet: `standup.py` calls the pipeline directly.
+This branch: **`checkpoint-4` — Pause and resume.** The checkpoint-3 standup pipeline, extended
+with two more steps that draft a Slack post and then pause for a real human decision before the
+one call that can't be undone. The pause is durable — resuming happens from a second, separate
+process, loading the paused run by id from the same PostgreSQL database checkpoint-2's memory
+already uses.
 
-Checkpoint-2's memory-backed agent (`main.py`) is still here, unchanged.
+Checkpoint-3's read-only pipeline (`standup.py` / `build_standup_pipeline`) is still here,
+unchanged. Checkpoint-2's memory-backed agent (`main.py`) is still here too.
 
 ## The pipeline
 
 ```
 fetch profile -> fetch open tickets -> fetch today's calendar -> synthesize
+    -> draft standup post -> [PAUSE for approval] -> publish standup post
 ```
 
-- The first three steps each call one MCP tool directly (`get_user_profile`,
-  `get_jira_tickets`, `get_calendar_events`) — no LLM, no decision, just data.
-- `fetch_tickets` reads the previous step's output (`step_input.get_step_output(...)`) to
-  filter tickets by the profile's username — steps can depend on each other's results even
-  though the *order* is fixed by the workflow definition, not by any step.
-- The last step, `synthesize`, is the only one with a model in it: a plain LiteLLM call that
-  turns the three gathered facts into standup prose. It has no tools and cannot go fetch
-  anything itself — it only writes up what already arrived.
+- `draft_standup_post` calls `post_slack_message` — the mock server's own draft/confirm write
+  pattern: this call has no side effect, it just returns a `pending_action_id`.
+- `publish_standup_post` is where the pipeline stops. `Step(..., human_review=HumanReview(
+  requires_confirmation=True, ...))` pauses execution *before* this step's body runs, and
+  persists that paused state to the workflow's `db` — the same `PostgresDb` checkpoint-2 uses
+  for memory. Only on approval does this step actually run and call `confirm_action` — the one
+  call in the whole pipeline that posts anything for real.
+- A denial (`OnReject.skip`) — or a run nobody ever resumes — leaves the draft sitting
+  unconfirmed. Nothing gets posted either way.
 
 ## Architecture
 
-- `src/daily_dev_assistant/pipeline.py` — the `Workflow` and its four `Step`s.
-- `standup.py` — the runnable entrypoint: connects to MCP, builds the pipeline, runs it once,
-  prints the result. Compare with `main.py` — no agent, no chat loop, no tool-choice at all.
-- `src/daily_dev_assistant/agent.py`, `main.py`, `docker-compose.yml` — unchanged from
-  checkpoint-2.
+- `src/daily_dev_assistant/pipeline.py` — checkpoint-3's four steps, unchanged, plus
+  `make_draft_post_step`, `make_publish_post_step`, and `build_standup_pipeline_with_approval`
+  (takes a `db` so pauses survive across processes).
+- `standup_with_approval.py` — runs the pipeline once. If it pauses, prints the run id, session
+  id, and the exact `resume_standup.py` commands to approve or deny.
+- `resume_standup.py` — a **separate script invocation**: loads the paused run from Postgres by
+  `(run_id, session_id)`, applies the decision, and continues it. Nothing about the paused state
+  lives in memory between these two scripts.
+- `standup.py`, `src/daily_dev_assistant/agent.py`, `main.py` — unchanged from checkpoint-3.
+- `docker-compose.yml` — fixed a pre-existing bug: the `postgres:18`-based image needs its
+  volume mounted at `/var/lib/postgresql`, not `/var/lib/postgresql/data`; the old mount point
+  made every fresh `docker compose up` crash-loop the container.
 
 ## Setup
 
 ```bash
-# 1. Start PostgreSQL (only needed for main.py / checkpoint-2's agent)
+# 1. Start PostgreSQL — required this time, pauses are persisted there
 docker compose up -d
 
 # 2. Install deps
@@ -51,22 +63,24 @@ The MCP mock server must be running separately (see checkpoint-1 README).
 ## Running
 
 ```bash
-uv run python standup.py
+uv run python standup_with_approval.py
 ```
 
 ## Demo script
 
 ```bash
-# 1. Run it — narrate each step firing in the fixed order as it streams
-uv run python standup.py
+# 1. Run it — it pauses; note the printed run id and session id
+uv run python standup_with_approval.py
 
-# 2. Open src/daily_dev_assistant/pipeline.py, swap the order of two steps in
-#    build_standup_pipeline (e.g. fetch_calendar before fetch_tickets), run again —
-#    the order actually changes. No prompt anywhere told it to.
+# 2. Resume that run id with "deny" — confirm nothing was posted
+uv run python resume_standup.py --run-id <id> --session-id <id> --decision deny
+
+# 3. Run it again, then resume with "approve" — check the mock Slack data for the write
+uv run python standup_with_approval.py
+uv run python resume_standup.py --run-id <id> --session-id <id> --decision approve
 ```
 
 ## Hands-on
 
-Add a step that fetches detail for every item found in `fetch_tickets` — one call to
-`get_jira_ticket_detail(ticket_id)` per ticket — and thread that richer detail into the
-`synthesize` step's prompt.
+Kill the terminal between step 1 and resuming — then resume anyway from a brand-new terminal.
+Same run id, same session id, same result: the state was never in memory to lose.
