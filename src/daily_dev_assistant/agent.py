@@ -61,7 +61,15 @@ def build_agent(
     db = PostgresDb(db_url=settings.db_url)
 
     return Agent(
-        model=LiteLLM(id=settings.model_id, api_key=settings.litellm_api_key, api_base=settings.litellm_base_url),
+        model=LiteLLM(
+            id=settings.model_id,
+            api_key=settings.litellm_api_key,
+            api_base=settings.litellm_base_url,
+            # Anthropic rejects temperature+top_p sent together; agno always
+            # sends both with non-None defaults, so drop both explicitly.
+            temperature=None,
+            top_p=None,
+        ),
         instructions=instructions,
         tools=[mcp_tools, *(extra_tools or [])],
         # --- Storage (session persistence) ---

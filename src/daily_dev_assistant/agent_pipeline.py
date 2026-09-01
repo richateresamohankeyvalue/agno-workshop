@@ -109,6 +109,10 @@ def build_reviewer(settings: Settings) -> Agent:
             id=settings.reviewer_model_id,
             api_key=settings.litellm_api_key,
             api_base=settings.litellm_base_url,
+            # Anthropic rejects temperature+top_p sent together; agno always
+            # sends both with non-None defaults, so drop both explicitly.
+            temperature=None,
+            top_p=None,
         ),
         instructions=REVIEW_INSTRUCTIONS,
     )
