@@ -46,7 +46,9 @@ uv pip install -e .
 cp .env.example .env   # fill in LITELLM_API_KEY
 ```
 
-The MCP mock server must be running separately (see checkpoint-1 README).
+The MCP mock server ([agent-sdk-bakeoff-mcp-server](https://github.com/richateresamohankeyvalue/agent-sdk-bakeoff-mcp-server))
+must be running separately (`docker compose up --build` in that repo) and reachable at
+`MCP_SERVER_URL` (default `http://localhost:8081/sse`).
 
 ## Running
 
