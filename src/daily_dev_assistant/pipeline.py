@@ -16,12 +16,17 @@ from __future__ import annotations
 
 import json
 
+import litellm
 from agno.agent import Agent
 from agno.models.litellm import LiteLLM
 from agno.tools.mcp import MCPTools
 from agno.workflow import Step, StepInput, StepOutput, Workflow
 
 from daily_dev_assistant.config import Settings
+
+# The shared workshop LiteLLM proxy rejects sampling params (temperature,
+# top_p, ...) that Anthropic models route through it don't support.
+litellm.drop_params = True
 
 MCP_TOOL_NAMES = ["get_user_profile", "get_jira_tickets", "get_calendar_events"]
 
