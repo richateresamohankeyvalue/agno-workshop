@@ -32,8 +32,10 @@ Everything from checkpoints 1–5 is unchanged: `main.py`, `standup.py`, `standu
 # 1. Start Postgres
 docker compose up -d
 
-# 2. Start the mock MCP server (separate terminal)
-uv run python mcp_server/server.py
+# 2. Start the shared MCP mock server (separate repo / terminal)
+#    https://github.com/richateresamohankeyvalue/agent-sdk-bakeoff-mcp-server
+#    docker compose up --build
+#    → http://localhost:8081/sse
 
 # 3. Install deps
 uv venv .venv
@@ -43,8 +45,8 @@ uv pip install -e .
 cp .env.example .env   # fill in LITELLM_API_KEY
 ```
 
-The mock MCP server lives in this repo (`mcp_server/`) on `http://localhost:8081/sse`.
-Start it manually with `uv run python mcp_server/server.py` before running the assistant.
+The MCP mock server ([agent-sdk-bakeoff-mcp-server](https://github.com/richateresamohankeyvalue/agent-sdk-bakeoff-mcp-server))
+must be running separately and reachable at `MCP_SERVER_URL` (default `http://localhost:8081/sse`).
 
 ## Running
 
