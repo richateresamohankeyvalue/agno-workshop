@@ -140,17 +140,37 @@ async def review_reply(reviewer: Agent, *, user_message: str, draft_reply: str, 
 
 
 @dataclass
+class TurnMetrics:
+    input_tokens: int = 0
+    output_tokens: int = 0
+    total_tokens: int = 0
+
+
+@dataclass
 class TurnResult:
     reply: str
     review_verdict: str
     tool_trace: List[Dict[str, Any]] = field(default_factory=list)
+    metrics: TurnMetrics = field(default_factory=TurnMetrics)
+
+
+def _extract_metrics(response: Any) -> TurnMetrics:
+    m = getattr(response, "metrics", None)
+    if m is None:
+        return TurnMetrics()
+    return TurnMetrics(
+        input_tokens=getattr(m, "input_tokens", 0) or 0,
+        output_tokens=getattr(m, "output_tokens", 0) or 0,
+        total_tokens=getattr(m, "total_tokens", 0) or 0,
+    )
 
 
 async def run_turn(agent: Agent, reviewer: Agent, message: str) -> TurnResult:
     response = await agent.arun(message)
     tool_trace = _tool_trace_from_response(response)
+    metrics = _extract_metrics(response)
 
     # Forced, unconditional — not a tool call the first model could skip.
     verdict = await review_reply(reviewer, user_message=message, draft_reply=response.content, tool_trace=tool_trace)
 
-    return TurnResult(reply=response.content, review_verdict=verdict, tool_trace=tool_trace)
+    return TurnResult(reply=response.content, review_verdict=verdict, tool_trace=tool_trace, metrics=metrics)
