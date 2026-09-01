@@ -48,20 +48,22 @@ Everything from checkpoints 1–6 is still here, unchanged: `main.py`, `standup.
 ## Setup
 
 ```bash
-# 1. Start Postgres + mock MCP server
+# 1. Start Postgres
 docker compose up -d
 
-# 2. Install deps
+# 2. Start the mock MCP server (separate terminal)
+uv run python mcp_server/server.py
+
+# 3. Install deps
 uv venv .venv
 uv pip install -e .
 
-# 3. Configure
+# 4. Configure
 cp .env.example .env   # fill in LITELLM_API_KEY
 ```
 
-The mock MCP server lives in this repo (`mcp_server/`) and is started by
-`docker compose up -d` as the `mcp` service on `http://localhost:8081/sse`.
-You can also run it without Docker: `uv run python mcp_server/server.py`.
+The mock MCP server lives in this repo (`mcp_server/`) on `http://localhost:8081/sse`.
+Start it manually with `uv run python mcp_server/server.py` before running the assistant.
 
 ## Running
 
