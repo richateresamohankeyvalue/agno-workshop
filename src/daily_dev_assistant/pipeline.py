@@ -93,7 +93,15 @@ say so plainly rather than omitting it."""
 
 def make_synthesize_step(settings: Settings) -> Step:
     synthesis_agent = Agent(
-        model=LiteLLM(id=settings.model_id, api_key=settings.litellm_api_key, api_base=settings.litellm_base_url),
+        model=LiteLLM(
+            id=settings.model_id,
+            api_key=settings.litellm_api_key,
+            api_base=settings.litellm_base_url,
+            # Anthropic rejects temperature+top_p sent together; agno always
+            # sends both with non-None defaults, so drop both explicitly.
+            temperature=None,
+            top_p=None,
+        ),
         instructions=SYNTHESIS_INSTRUCTIONS,
     )
 
