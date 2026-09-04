@@ -9,18 +9,17 @@ matter most in a real adoption decision, added to the checkpoint-5 assistant:
 | Feature | What it shows |
 |---|---|
 | **Token usage** | `input / output / total` printed after every turn — zero extra setup, straight off the response |
-| **Automated grader** | A second, different model scores each reply on grounding, completeness, conciseness |
+| **Agno evals** | [AgentAsJudgeEval](https://docs.agno.com/evals/agent-as-judge/overview) on every turn + a `Case` suite in `evals.py` ([evaluation](https://docs.agno.com/features/evaluation)) |
 | **Model portability** | Change `AGENT_MODEL_ID` in `.env`, re-run the same script — zero code changes |
 
 ## Architecture (what's new)
 
-- `src/daily_dev_assistant/grader.py` — `build_grader` + `grade_reply`: a small model that
-  scores each response against a three-criterion rubric. Deliberately a different model family
-  from the agent's own.
-- `src/daily_dev_assistant/agent_pipeline.py` — `TurnMetrics` added to `TurnResult`, extracted
-  from the Agno response's built-in `metrics` field.
-- `assistant.py` — prints token counts, review verdict (checkpoint-5), and grading result after
-  every turn. Prints the model id at startup so model-swap is visible.
+- `src/daily_dev_assistant/grader.py` — wraps Agno's `AgentAsJudgeEval` (numeric score, threshold,
+  different `GRADER_MODEL_ID`). This is the framework eval surface, not a hand-rolled second agent.
+- `evals.py` — offline/CI-style suite via `Case` + `acli`: agent-as-judge **and** reliability
+  (`expected_tool_calls`). Nonzero exit code on failure.
+- `src/daily_dev_assistant/agent_pipeline.py` — `TurnMetrics` on `TurnResult` from `response.metrics`.
+- `assistant.py` — prints Tokens, Review (cp5), and Eval (judge) after every turn.
 - `src/daily_dev_assistant/config.py` — adds `GRADER_MODEL_ID`.
 
 Everything from checkpoints 1–5 is unchanged: `main.py`, `standup.py`, `standup_with_approval.py`,
@@ -45,26 +44,32 @@ uv pip install -e .
 cp .env.example .env   # fill in LITELLM_API_KEY
 ```
 
-The MCP mock server ([agent-sdk-bakeoff-mcp-server](https://github.com/richateresamohankeyvalue/agent-sdk-bakeoff-mcp-server))
-must be running separately and reachable at `MCP_SERVER_URL` (default `http://localhost:8081/sse`).
-
 ## Running
 
 ```bash
+# Live assistant (per-turn judge + tokens)
 uv run python assistant.py --user alice
+
+# Offline eval suite (judge + reliability Cases)
+uv run python evals.py
+uv run python evals.py --list
+uv run python evals.py --name calendar_uses_tool
 ```
 
 ## Demo script
 
 ```
 1. run "hi"
-   — point at the token line: input / output / total
+   — point at Tokens + Eval (score/passed)
 
-2. Change AGENT_MODEL_ID in .env to a different provider, re-run —
+2. uv run python evals.py
+   — show Case pass/fail (including expected get_calendar_events)
+
+3. Change AGENT_MODEL_ID in .env, re-run assistant.py —
    same script, different model, zero other changes
 ```
 
 ## Hands-on
 
-Write one grading check in `grader.py` for a failure mode you care about (tone, verbosity, a
-compliance rule) and run it against a real transcript.
+Add one more `Case` in `evals.py` for a failure mode you care about (tone, a required tool,
+a compliance rule) and run `uv run python evals.py --name <your-case>`.

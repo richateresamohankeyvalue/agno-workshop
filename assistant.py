@@ -3,12 +3,13 @@
 
 Same agent + reviewer as checkpoint-5, plus:
   - Token usage printed after every turn (input, output, total)
-  - An automated grader scoring each reply on grounding, completeness, conciseness
+  - Agno AgentAsJudgeEval on every turn (see also evals.py Case suite)
   - Model swappable via AGENT_MODEL_ID in .env — same script, different model
 
 Usage:
     uv run python assistant.py --user alice
-    AGENT_MODEL_ID=gpt-4o uv run python assistant.py --user alice   # swap model
+    uv run python evals.py                         # offline Case suite
+    AGENT_MODEL_ID=gpt-4o uv run python assistant.py --user alice
 """
 
 from __future__ import annotations
@@ -23,7 +24,7 @@ from daily_dev_assistant.agent import INSTRUCTIONS as BASE_INSTRUCTIONS
 from daily_dev_assistant.agent import build_agent, build_mcp_tools
 from daily_dev_assistant.agent_pipeline import build_reviewer, build_standup_tools, run_turn
 from daily_dev_assistant.config import load_settings
-from daily_dev_assistant.grader import build_grader, grade_reply
+from daily_dev_assistant.grader import build_judge_eval, grade_reply
 from daily_dev_assistant.pipeline import build_mcp_tools_with_approval
 
 STANDUP_TOOL_INSTRUCTIONS = BASE_INSTRUCTIONS + """
@@ -68,7 +69,8 @@ async def main() -> None:
             extra_tools=[start_standup, resume_standup],
         )
         reviewer = build_reviewer(settings)
-        grader = build_grader(settings)
+        # Agno built-in agent-as-judge (not a hand-rolled grader agent).
+        judge_eval = build_judge_eval(settings, db=db)
 
         print(f"Model: {settings.model_id}")
         print(f"Connected. Agent tools: {sorted(agent_mcp_tools.functions)} + start/resume_standup_pipeline")
@@ -93,9 +95,14 @@ async def main() -> None:
             # Review (checkpoint-5's grounding check)
             print(f"  Review: {turn.review_verdict}")
 
-            # Grade (checkpoint-6's quality rubric)
-            grade = await grade_reply(grader, user_message=message, reply=turn.reply, tool_trace=turn.tool_trace)
-            print(f"  Grade:\n    {grade.raw_verdict.replace(chr(10), chr(10) + '    ')}")
+            # Eval (checkpoint-6): Agno AgentAsJudgeEval
+            grade = await grade_reply(
+                judge_eval,
+                user_message=message,
+                reply=turn.reply,
+                tool_trace=turn.tool_trace,
+            )
+            print(f"  Eval: {grade.raw_verdict}")
             print()
     finally:
         await agent_mcp_tools.close()
