@@ -9,7 +9,7 @@ Two kinds of memory, two different scopes:
   Long-term (user memories)
     → Facts the agent decides are worth retaining about a person.
     → Scoped to a user_id — survives across sessions.
-    → Enabled by `enable_user_memories=True`.
+    → Enabled via `LearningMachine(db=db, user_memory=True)` passed as `learning=`.
 
 Both are backed by PostgreSQL via Agno's built-in `PostgresDb`.
 """
@@ -19,6 +19,7 @@ from __future__ import annotations
 import litellm
 from agno.agent import Agent
 from agno.db.postgres import PostgresDb
+from agno.learn import LearningMachine
 from agno.models.litellm import LiteLLM
 from agno.tools.mcp import MCPTools
 
@@ -54,6 +55,11 @@ def build_agent(
 ) -> Agent:
     db = PostgresDb(db_url=settings.db_url)
 
+    learning = LearningMachine(
+        db=db,
+        user_memory=True,
+    )
+
     return Agent(
         model=LiteLLM(id=settings.model_id, api_key=settings.litellm_api_key, api_base=settings.litellm_base_url),
         instructions=INSTRUCTIONS,
@@ -63,8 +69,8 @@ def build_agent(
         # --- Short-term: include recent turns in context ---
         add_history_to_context=True,
         num_history_runs=5,
-        # --- Long-term: extract and recall user-scoped facts ---
-        update_memory_on_run=True,
+        # --- Long-term: LearningMachine stores user-scoped facts ---
+        learning=learning,
         # --- Identity ---
         user_id=user_id,
         session_id=session_id,
