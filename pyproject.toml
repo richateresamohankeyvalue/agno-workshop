@@ -5,7 +5,7 @@ description = "Developer daily assistant agent, built on Agno — Agent SDK Bake
 readme = "README.md"
 requires-python = ">=3.12"
 dependencies = [
-    "agno[mcp]>=3.0.0",
+    "agno[mcp,os]>=3.0.0",
     "litellm>=1.92.0",
     "python-dotenv>=1.2.2",
     "sqlalchemy>=2.0.0",

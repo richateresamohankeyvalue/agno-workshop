@@ -58,7 +58,7 @@ def build_agent(
     instructions: str = INSTRUCTIONS,
     extra_tools: Optional[Sequence[Callable[..., Any]]] = None,
 ) -> Agent:
-    db = PostgresDb(db_url=settings.db_url)
+    db = db or PostgresDb(db_url=settings.db_url)
 
     return Agent(
         model=LiteLLM(
