@@ -23,9 +23,11 @@ from agno.learn import LearningMachine
 from agno.models.litellm import LiteLLM
 from agno.tools.mcp import MCPTools
 
-litellm.drop_params = True
-
 from daily_dev_assistant.config import Settings
+
+# The shared workshop LiteLLM proxy rejects sampling params (temperature,
+# top_p, ...) that Anthropic models route through it don't support.
+litellm.drop_params = True
 
 TOOL_NAMES = ["get_calendar_events", "get_github_prs"]
 
@@ -61,7 +63,15 @@ def build_agent(
     )
 
     return Agent(
-        model=LiteLLM(id=settings.model_id, api_key=settings.litellm_api_key, api_base=settings.litellm_base_url),
+        model=LiteLLM(
+            id=settings.model_id,
+            api_key=settings.litellm_api_key,
+            api_base=settings.litellm_base_url,
+            # Anthropic rejects temperature+top_p sent together; agno always
+            # sends both with non-None defaults, so drop both explicitly.
+            temperature=None,
+            top_p=None,
+        ),
         instructions=INSTRUCTIONS,
         tools=[mcp_tools] if mcp_tools else [],
         # --- Storage (session persistence) ---
