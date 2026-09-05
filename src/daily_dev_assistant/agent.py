@@ -20,6 +20,7 @@ from typing import Any, Callable, Optional, Sequence
 
 import litellm
 from agno.agent import Agent
+from agno.db.base import BaseDb
 from agno.db.postgres import PostgresDb
 from agno.models.litellm import LiteLLM
 from agno.tools.mcp import MCPTools
@@ -53,10 +54,11 @@ def build_agent(
     settings: Settings,
     mcp_tools: MCPTools,
     *,
-    user_id: str,
-    session_id: str,
+    user_id: Optional[str] = None,
+    session_id: Optional[str] = None,
     instructions: str = INSTRUCTIONS,
     extra_tools: Optional[Sequence[Callable[..., Any]]] = None,
+    db: Optional[BaseDb] = None,
 ) -> Agent:
     db = db or PostgresDb(db_url=settings.db_url)
 
