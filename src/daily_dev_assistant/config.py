@@ -7,7 +7,10 @@ from dataclasses import dataclass
 
 from dotenv import load_dotenv
 
-DEFAULT_MODEL_ID = "claude-sonnet-5"
+DEFAULT_MODEL_ID = "litellm_proxy/anthropic/claude-sonnet-5"
+# Deliberately a different, smaller model than the agent's own — checkpoint-5's
+# reviewer should not share a blind spot with the model it's checking.
+DEFAULT_REVIEWER_MODEL_ID = "litellm_proxy/anthropic/claude-haiku-4-5"
 DEFAULT_DB_URL = "postgresql+psycopg://ai:ai@localhost:5532/ai"
 
 

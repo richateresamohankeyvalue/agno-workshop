@@ -36,6 +36,7 @@ def build_mcp_tools(settings: Settings) -> MCPTools:
         url=settings.mcp_server_url,
         transport=settings.mcp_transport,
         include_tools=MCP_TOOL_NAMES,
+        timeout_seconds=60,
     )
 
 
